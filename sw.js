@@ -1,11 +1,12 @@
-const CACHE_NAME = "biere-v4"; // Nouvelle version pour forcer la mise à jour
+const CACHE_NAME = "biere-v5"; // On change la version pour forcer la maj
 
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
   "./style.css",     
   "./manifest.json",
-  "./offline.html"   // <--- MAINTENANT ON PEUT LE METTRE CAR IL EXISTE !
+  "./offline.html",
+  "./images/icons-vector.png" // Assure-toi que ce chemin est bon !
 ];
 
 // 1. INSTALLATION
@@ -13,7 +14,7 @@ self.addEventListener("install", event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(ASSETS_TO_CACHE))
-      .catch(err => console.error("Erreur d'installation :", err))
+      .catch(err => console.error("Erreur d'installation (Fichier manquant ?) :", err))
   );
 });
 
@@ -30,23 +31,17 @@ self.addEventListener("activate", event => {
   );
 });
 
-// 3. FETCH (Gestion intelligente)
+// 3. FETCH
 self.addEventListener("fetch", event => {
-  // On ignore les requêtes non-http (extensions, etc.)
-  // if (!event.request.url.startsWith('http')) return;
 
-  // Stratégie : Cache d'abord, puis Réseau, puis Page Offline
+  if (!event.request.url.startsWith('http')) return;
+
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
-      // A. Si trouvé dans le cache, on rend
-      if (cachedResponse) {
-        return cachedResponse;
-      }
+      if (cachedResponse) return cachedResponse;
 
-      // B. Sinon, on tente le réseau
       return fetch(event.request)
         .then(networkResponse => {
-           // Si l'API répond bien, on sauvegarde la réponse pour la prochaine fois
            if (networkResponse && networkResponse.status === 200) {
                const responseClone = networkResponse.clone();
                caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
@@ -54,8 +49,7 @@ self.addEventListener("fetch", event => {
            return networkResponse;
         })
         .catch(() => {
-           // C. SI TOUT ECHOUE (Pas de cache + Pas d'internet)
-           // On renvoie la page offline.html SEULEMENT si c'est une page web (HTML) qu'on demandait
+           // Page Offline si besoin
            if (event.request.headers.get('accept').includes('text/html')) {
                return caches.match('./offline.html');
            }
