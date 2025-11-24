@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    
+    <title>C'est de la bonne bière</title>
+</head>
+<body>
+    <main>
+        <div class="autre-page">
+            <nav>
+                <ul>
+                    <li><a href="createBeer.html" > Add Beers </a></li>
+                </ul>
+            </nav>
+        </div>
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Rechercher une bière...">
+        </div>
+        <div id="beers"></div>
+        <div class="pagination">
+            <button id="prevPage">Précédent</button>
+            <span class="current-page" id="currentPage">Page 1</span>
+            <button id="nextPage">Suivant</button>
+        </div>
+    </main>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((reg) => {
+                        console.log('Service worker enregistré avec succès', reg);
+                    })
+                    .catch((err) => {
+                        console.error('Erreur lors de l\'enregistrement du service worker', err);
+                    });
+            }
+ 
+
+        let currentPage = 1;
+        const perPage = 30;
+        let allBeers = [];
+        let filteredBeers = [];
+        let test = 30;
+  
+        const beersContainer = document.getElementById('beers');
+        const searchInput = document.getElementById('searchInput');
+        const prevPageButton = document.getElementById('prevPage');
+        const nextPageButton = document.getElementById('nextPage');
+        const currentPageSpan = document.getElementById('currentPage');
+
+async function loadAllBeers() {
+    try {
+        await initDB(); 
+        const beersFromLocal = await readDb();
+
+        if (beersFromLocal.length > 0) {
+            console.log(" Chargement depuis la base de données");
+                        allBeers = beersFromLocal; 
+            
+        } else {
+            console.log("Rien ");
+            
+            const response = await fetch(`https://punkapi.online/v3/beers?page=1&per_page=80`);
+            const data = await response.json();
+
+            if (Array.isArray(data)) {
+                allBeers = data;
+                
+                await addToDb(allBeers); 
+                console.log("Bières sauvegardées   !");
+            }
+        }
+
+        filteredBeers = [...allBeers];
+        displayBeers();
+        setupPagination();
+
+    } catch (error) {
+        console.error("Erreur critique :", error);
+        beersContainer.innerHTML = "<p>Erreur lors du chargement.</p>";
+    }
+}
+
+        // ajout les bières avec pagination
+        function displayBeers() {
+            const startIndex = (currentPage - 1) * perPage;
+            const endIndex = startIndex + perPage;
+            const beersToShow = filteredBeers.slice(startIndex, endIndex);
+
+            if (beersToShow.length === 0) {
+                beersContainer.innerHTML = "<p>Aucune bière trouvée.</p>";
+                return;
+            }
+
+            let html = "<div>";
+            beersToShow.forEach(beer => {
+                html += `
+                    <div class="beer-card">
+                        <h3>${beer.name}</h3>
+                        <img src="https://punkapi.online/v3/images/${beer.image}" alt="${beer.name}">
+                        <p><em>${beer.tagline}</em></p>
+                        <p><strong>ABV: ${beer.abv}%</strong></p>
+                    </div>
+                `
+            });
+            html += "</div>";
+            beersContainer.innerHTML = html;
+            
+        }
+
+        function setupPagination() {
+            //calcule de toute les pages pour la pagination
+            const totalPages = Math.ceil(filteredBeers.length / perPage);
+            
+            // Mettre à jour l'affichage de la page courante
+            currentPageSpan.textContent = `Page ${currentPage} sur ${totalPages}`;
+            
+            // Activer/désactiver les boutons
+            prevPageButton.disabled = currentPage === 1;
+            nextPageButton.disabled = currentPage === totalPages || totalPages === 0;
+        }
+
+        
+        function searchBeers() {
+            // recup le label
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            
+            if (searchTerm === '') {
+                filteredBeers = [...allBeers]; // si vide on montre tout 
+            } else {
+                filteredBeers = allBeers.filter(beer => 
+                    beer.name.toLowerCase().includes(searchTerm) ||
+                    beer.tagline.toLowerCase().includes(searchTerm) ||
+                    beer.description.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            currentPage = 1; 
+            displayBeers();
+            setupPagination();
+        }
+
+        // Événements
+        searchInput.addEventListener('input', searchBeers);
+        
+        prevPageButton.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                displayBeers();
+                setupPagination();
+            }
+        });
+
+        nextPageButton.addEventListener('click', () => {
+            const totalPages = Math.ceil(filteredBeers.length / perPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                displayBeers();
+                setupPagination();
+            }
+        });
+        // Initialisation
+        loadAllBeers();
+
+
+
+
+        // IndexDB 
+    let db; 
+
+    function initDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open('BeersDB', 2);
+            request.onupgradeneeded = (event) => {
+                db = event.target.result;
+                if (!db.objectStoreNames.contains('beers')) {
+                    db.createObjectStore('beers', { keyPath: 'id' }); 
+                }
+            };
+
+            request.onsuccess = (event) => {
+                db = event.target.result; 
+                resolve(db); 
+            };
+
+            request.onerror = (event) => {
+                console.error("Erreur ouverture DB");
+                reject(event.target.error);
+            };
+        });
+    }
+
+
+    function addToDb(beersList) {
+        return new Promise((resolve, reject) => {
+
+            const transaction = db.transaction(['beers'], 'readwrite');
+            const store = transaction.objectStore('beers');
+
+            beersList.forEach(beer => {
+                store.put(beer); 
+            });
+
+            transaction.oncomplete = () => {
+                resolve();
+            };
+
+            transaction.onerror = (event) => {
+                console.log("Erreur insertion");
+                reject(event.target.error);
+            };
+        });
+    }
+
+    function readDb() {
+        return new Promise((resolve, reject) => {
+            
+            const transaction = db.transaction(['beers'], 'readonly'); 
+            const store = transaction.objectStore('beers');
+            const request = store.getAll(); 
+            
+
+
+            request.onsuccess = () => {
+                resolve(request.result); 
+            };
+
+            request.onerror = (event) => {
+                reject(event.target.error);
+            };
+        });
+    }
+        
+
+
+    </script>
+</body>
+</html>

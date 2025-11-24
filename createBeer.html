@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajouter une Bière</title>
+</head>
+<body>
+
+    <div class="add-beer-form" style="border: 2px solid #333; padding: 20px; margin: 20px auto; max-width: 500px; background: #f9f9f9;">
+        <h3>Ajouter une nouvelle bière</h3>
+        <form id="beerForm">
+            <input type="text" id="beerName" placeholder="Nom de la bière" required style="width: 100%; margin-bottom: 10px; padding: 8px;">
+            <input type="text" id="beerTagline" placeholder="Slogan (Tagline)" required style="width: 100%; margin-bottom: 10px; padding: 8px;">
+            <textarea id="beerDesc" placeholder="Description" style="width: 100%; margin-bottom: 10px; padding: 8px;"></textarea>
+            <button type="submit" style="padding: 10px 20px; background: #333; color: white; border: none; cursor: pointer;">Enregistrer la bière</button>
+        </form>
+        <br>
+        <a href="index.html">← Retour à la liste des bières</a>
+    </div>
+
+
+    
+<script>
+    
+    let db;
+    const DB_NAME = 'BeersDB';
+    const DB_VERSION = 2; 
+
+    function initDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            
+            request.onupgradeneeded = (event) => {
+                db = event.target.result;
+                if (!db.objectStoreNames.contains('beers')) {
+                    db.createObjectStore('beers', { keyPath: 'id' });
+                }
+            };
+            request.onsuccess = (event) => {
+                db = event.target.result;
+                resolve(db);
+            };
+            request.onerror = (event) => reject(event);
+        });
+    }
+
+    function addToDb(beersList) {
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction(['beers'], 'readwrite');
+            const store = transaction.objectStore('beers');
+            beersList.forEach(beer => store.put(beer));
+            
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = (event) => reject(event);
+        });
+    }
+
+
+    class Beer {
+        constructor(name, tagline, description) {
+            this.id = Date.now(); 
+            this.name = name;
+            this.tagline = tagline;
+            this.description = description;
+            this.first_brewed = new Date().toLocaleDateString(); 
+            this.image = null; 
+            this.abv = "N/A";
+        }
+
+        async save() {
+
+            if(!db) await initDB();
+
+            await addToDb([this]); 
+
+            console.log("Bière sauvegardée dans IndexedDB !");
+        }
+    }
+
+    const form = document.getElementById('beerForm');
+
+    form.addEventListener('submit', async function(event) {
+        event.preventDefault(); 
+
+        const nameVal = document.getElementById('beerName').value;
+        const taglineVal = document.getElementById('beerTagline').value;
+        const descVal = document.getElementById('beerDesc').value;
+
+        const newBeer = new Beer(nameVal, taglineVal, descVal);
+
+        try {
+            await newBeer.save();
+
+            form.reset();
+            alert("Bière ajoutée avec succès ! Tu peux retourner à l'accueil.");
+            
+            // window.location.href = "index.html"; 
+
+        } catch (error) {
+            console.error(error);
+            alert("Erreur lors de la sauvegarde.");
+        }
+    });
+
+    initDB();
+
+</script>
+</body>
+</html>
