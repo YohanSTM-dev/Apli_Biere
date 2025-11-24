@@ -33,7 +33,7 @@ self.addEventListener("activate", event => {
 // 3. FETCH (Gestion intelligente)
 self.addEventListener("fetch", event => {
   // On ignore les requêtes non-http (extensions, etc.)
-  if (!event.request.url.startsWith('http')) return;
+  // if (!event.request.url.startsWith('http')) return;
 
   // Stratégie : Cache d'abord, puis Réseau, puis Page Offline
   event.respondWith(
